@@ -15,7 +15,6 @@ Everything here comes from the ROMs, so the folder never goes into the repositor
 import argparse
 import json
 import os
-import shutil
 import struct
 import sys
 import zlib
@@ -79,16 +78,47 @@ def grid(icons):
     return px
 
 
+def trimmed_size(path):
+    """Size without the 0xFF padding at the end of a cartridge dump (melonDS pads it back)."""
+    with open(path, "rb") as f:
+        head = f.read(0x1000)
+        total = os.fstat(f.fileno()).st_size
+        fat_off, fat_size = struct.unpack_from("<II", head, 0x48)
+        banner_off = struct.unpack_from("<I", head, 0x68)[0]
+        end = max(struct.unpack_from("<I", head, 0x80)[0], banner_off + 0xA00)
+        f.seek(fat_off)
+        fat = f.read(fat_size)
+    for i in range(fat_size // 8):
+        start, stop = struct.unpack_from("<II", fat, i * 8)
+        if stop > start:
+            end = max(end, stop)
+    if head[0x12] & 2:  # DSi-enhanced: keep the TWL area
+        end = max(end, struct.unpack_from("<I", head, 0x210)[0])
+    return min((end + 3) & ~3, total)
+
+
 def place(src, dst):
-    """Hard link (no extra disk space) when possible, otherwise copy."""
+    """Trimmed copy of the ROM; a hard link when there's nothing to trim."""
+    size = trimmed_size(src)
     if os.path.exists(dst):
-        if os.path.getsize(dst) == os.path.getsize(src):
-            return
+        if os.path.getsize(dst) == size:
+            return size
         os.remove(dst)
-    try:
-        os.link(src, dst)
-    except OSError:
-        shutil.copyfile(src, dst)
+    if size == os.path.getsize(src):
+        try:
+            os.link(src, dst)
+            return size
+        except OSError:
+            pass
+    with open(src, "rb") as fi, open(dst, "wb") as fo:
+        left = size
+        while left:
+            chunk = fi.read(min(left, 1 << 22))
+            if not chunk:
+                break
+            fo.write(chunk)
+            left -= len(chunk)
+    return size
 
 
 def main():
@@ -127,11 +157,11 @@ def main():
         icon = banner_icon(bytes(fake))
         icons.append(icon)
         name = os.path.basename(path)
-        place(path, os.path.join(games_dir, name))
+        size = place(path, os.path.join(games_dir, name))
         write_png(os.path.join(games_dir, f"icon_{i}.png"), icon, scale=8)
         code = head[12:16].decode("ascii", "replace")
         meta.append({"label": label, "file": name, "icon": f"icon_{i}.png", "code": code})
-        print(f"[android] {i}: {code} {label} <- {name}")
+        print(f"[android] {i}: {code} {label} <- {name} ({size} of {os.path.getsize(path)} bytes)")
 
     with open(os.path.join(games_dir, "games.json"), "w", encoding="utf-8") as f:
         json.dump(meta, f, ensure_ascii=False, indent=1)
