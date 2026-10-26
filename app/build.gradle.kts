@@ -34,7 +34,8 @@ android {
     compileSdk = AppConfig.compileSdkVersion
     ndkVersion = AppConfig.ndkVersion
     defaultConfig {
-        applicationId = "br.kyra.pokemonbr"
+        // Personal build (ROMs inside) and shareable build (reads the ROMs folder) install side by side.
+        applicationId = if (embeddedGamesDir != null) "br.kyra.pokemonbr" else "br.kyra.pokemonbr.roms"
         minSdk = AppConfig.minSdkVersion
         targetSdk = AppConfig.targetSdkVersion
         versionCode = AppConfig.versionCode

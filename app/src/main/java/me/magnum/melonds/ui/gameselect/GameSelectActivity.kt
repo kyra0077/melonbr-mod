@@ -59,15 +59,35 @@ import me.magnum.melonds.domain.model.layout.SecondaryScreenMode
 import me.magnum.melonds.domain.model.rom.Rom
 import me.magnum.melonds.domain.model.rom.config.RomConfig
 import me.magnum.melonds.ui.emulator.EmulatorActivity
+import android.provider.DocumentsContract
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.mutableStateMapOf
+import dagger.hilt.android.AndroidEntryPoint
+import me.magnum.melonds.common.Permission
+import me.magnum.melonds.common.UriPermissionManager
+import me.magnum.melonds.common.contracts.DirectoryPickerContract
+import me.magnum.melonds.domain.model.RomScanningStatus
+import me.magnum.melonds.domain.repositories.RomsRepository
+import me.magnum.melonds.domain.repositories.SettingsRepository
+import me.magnum.melonds.impl.RomIconProvider
 import org.json.JSONArray
 import java.io.File
+import javax.inject.Inject
 import androidx.compose.ui.graphics.Color as ComposeColor
 
 /**
- * Launcher screen of the "Pokémon BR" build: one card per game embedded in the APK
- * (assets/games/games.json). Picking a card copies that ROM out of the APK the first
- * time (the emulator needs a real file) and boots it straight away.
+ * Launcher screen of the "Pokémon BR" build.
+ *
+ * Personal build (ROMs embedded): one card per game in assets/games/games.json. Picking a
+ * card copies that ROM out of the APK the first time (the emulator needs a real file).
+ *
+ * Shareable build (no ROMs inside): the player's own games from the ROMs folder
+ * (Documents/Pokemon BR/ROMs), which the app creates and can open in the file manager.
  */
+@AndroidEntryPoint
 class GameSelectActivity : AppCompatActivity() {
 
     data class EmbeddedGame(
@@ -75,15 +95,63 @@ class GameSelectActivity : AppCompatActivity() {
         val fileName: String,
         val asset: String,
         val icon: ImageBitmap?,
+        val rom: Rom? = null, // set for games found in the ROMs folder
     )
+
+    @Inject lateinit var romsRepository: RomsRepository
+    @Inject lateinit var settingsRepository: SettingsRepository
+    @Inject lateinit var romIconProvider: RomIconProvider
+    @Inject lateinit var uriPermissionManager: UriPermissionManager
+
+    private val folderAccess = mutableStateOf(false)
+    private var isFolderMode = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge(statusBarStyle = SystemBarStyle.dark(Color.TRANSPARENT), navigationBarStyle = SystemBarStyle.dark(Color.TRANSPARENT))
         super.onCreate(savedInstanceState)
-        val games = loadGames(this)
+        val embedded = loadGames(this)
+        isFolderMode = embedded.isEmpty()
         val prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
+        if (isFolderMode) {
+            RomsFolder.ensureExists()
+            folderAccess.value = hasFolderAccess()
+        }
 
         setContent {
+            val romsFlow = remember { if (isFolderMode) romsRepository.getRoms() else kotlinx.coroutines.flow.flowOf(emptyList()) }
+            val folderRoms by romsFlow.collectAsState(initial = emptyList())
+            val scanning by romsRepository.getRomScanningStatus().collectAsState()
+            val icons = remember { mutableStateMapOf<String, ImageBitmap?>() }
+            LaunchedEffect(folderRoms) {
+                folderRoms.forEach { rom ->
+                    val key = rom.uri.toString()
+                    if (!icons.containsKey(key)) icons[key] = runCatching { romIconProvider.getRomIcon(rom)?.asImageBitmap() }.getOrNull()
+                }
+            }
+            val games = if (isFolderMode) {
+                folderRoms.filter { !it.isDsiWareTitle }
+                    .sortedBy { cleanRomName(it.config.customName ?: it.name).lowercase() }
+                    .map { rom ->
+                        EmbeddedGame(
+                            label = cleanRomName(rom.config.customName ?: rom.name),
+                            fileName = rom.fileName,
+                            asset = "",
+                            icon = icons[rom.uri.toString()],
+                            rom = rom,
+                        )
+                    }
+            } else {
+                embedded
+            }
+            val pickFolder = rememberLauncherForActivityResult(DirectoryPickerContract(Permission.READ_WRITE)) { uri ->
+                if (uri != null) {
+                    runCatching { uriPermissionManager.persistDirectoryPermissions(uri, Permission.READ_WRITE) }
+                    settingsRepository.addRomSearchDirectory(uri)
+                    folderAccess.value = hasFolderAccess()
+                    romsRepository.rescanRoms()
+                }
+            }
+
             var preparing by remember { mutableStateOf<Preparing?>(null) }
             var error by remember { mutableStateOf<String?>(null) }
             var lastPlayed by remember { mutableStateOf(prefs.getString(KEY_LAST, null)) }
@@ -92,6 +160,18 @@ class GameSelectActivity : AppCompatActivity() {
 
             GameSelectScreen(
                 games = games,
+                folder = if (isFolderMode) FolderState(
+                    path = currentFolderLabel(),
+                    hasAccess = folderAccess.value,
+                    scanning = scanning == RomScanningStatus.SCANNING,
+                    onOpenFolder = {
+                        if (!RomsFolder.open(this)) {
+                            Toast.makeText(this, "Abra o gerenciador de arquivos e vá até ${RomsFolder.DISPLAY_PATH}", Toast.LENGTH_LONG).show()
+                        }
+                    },
+                    onGrantAccess = { pickFolder.launch(RomsFolder.documentUri()) },
+                    onRefresh = { romsRepository.rescanRoms() },
+                ) else null,
                 lastPlayed = lastPlayed,
                 preparing = preparing,
                 error = error,
@@ -103,6 +183,12 @@ class GameSelectActivity : AppCompatActivity() {
                 onSelect = { game ->
                     if (preparing != null) return@GameSelectScreen
                     error = null
+                    game.rom?.let { rom ->
+                        prefs.edit().putString(KEY_LAST, game.fileName).apply()
+                        lastPlayed = game.fileName
+                        startActivity(EmulatorActivity.getRomEmulatorActivityIntent(this, rom))
+                        return@GameSelectScreen
+                    }
                     scope.launch {
                         try {
                             preparing = Preparing(game.label, 0f)
@@ -119,6 +205,31 @@ class GameSelectActivity : AppCompatActivity() {
                 },
             )
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Back from the file manager: pick up games copied in the meantime.
+        if (isFolderMode) {
+            folderAccess.value = hasFolderAccess()
+            if (folderAccess.value) romsRepository.rescanRoms()
+        }
+    }
+
+    private fun hasFolderAccess(): Boolean {
+        val dirs = settingsRepository.getRomSearchDirectories()
+        if (dirs.isEmpty()) return false
+        val granted = contentResolver.persistedUriPermissions.filter { it.isReadPermission }.map { it.uri }
+        return dirs.any { it in granted }
+    }
+
+    /** "Documentos/Pokemon BR/ROMs", or the folder the player picked instead. */
+    private fun currentFolderLabel(): String {
+        val dir = settingsRepository.getRomSearchDirectories().firstOrNull() ?: return RomsFolder.DISPLAY_PATH
+        if (RomsFolder.isExpectedTree(dir)) return RomsFolder.DISPLAY_PATH
+        val id = runCatching { DocumentsContract.getTreeDocumentId(dir) }.getOrNull() ?: return RomsFolder.DISPLAY_PATH
+        return id.substringAfter(':').ifBlank { "armazenamento interno" }
+            .replaceFirst("Documents", "Documentos").replaceFirst("Download", "Downloads")
     }
 
     /** Copies the ROM out of the APK unless an identical-size copy is already there. */
@@ -171,6 +282,14 @@ class GameSelectActivity : AppCompatActivity() {
         private const val PREFS = "pokemon_br"
         private const val KEY_LAST = "last_game"
 
+        /** "POKéMON Black Version 2" -> "Pokémon Black 2" (banner titles are what the ROM list gives). */
+        fun cleanRomName(name: String): String {
+            return name.replace(Regex("(?i)pok[eé]mon"), "Pokémon")
+                .replace(Regex("(?i)\\s+version(\\s|$)"), " ")
+                .replace(Regex("\\s+"), " ")
+                .trim()
+        }
+
         fun loadGames(context: Context): List<EmbeddedGame> {
             val json = try {
                 context.assets.open("games/games.json").bufferedReader(Charsets.UTF_8).use { it.readText() }
@@ -196,6 +315,16 @@ class GameSelectActivity : AppCompatActivity() {
     }
 }
 
+/** Shareable build: where the ROMs folder is and what the player can do with it. */
+internal data class FolderState(
+    val path: String,
+    val hasAccess: Boolean,
+    val scanning: Boolean,
+    val onOpenFolder: () -> Unit,
+    val onGrantAccess: () -> Unit,
+    val onRefresh: () -> Unit,
+)
+
 /** A ROM being copied out of the APK before its first launch. */
 internal data class Preparing(val label: String, val progress: Float)
 
@@ -204,6 +333,7 @@ private val Accent = ComposeColor(0xFF78C8FF)
 @Composable
 private fun GameSelectScreen(
     games: List<GameSelectActivity.EmbeddedGame>,
+    folder: FolderState?,
     lastPlayed: String?,
     preparing: Preparing?,
     error: String?,
@@ -231,7 +361,10 @@ private fun GameSelectScreen(
             )
             Spacer(Modifier.height(if (landscape) 16.dp else 32.dp))
 
-            if (games.isEmpty()) {
+            if (folder != null) {
+                FolderPanel(folder, gamesFound = games.size)
+                Spacer(Modifier.height(16.dp))
+            } else if (games.isEmpty()) {
                 Text(
                     "Nenhum jogo embutido neste aplicativo.",
                     color = ComposeColor(0xFF969EAF),
@@ -256,7 +389,9 @@ private fun GameSelectScreen(
             }
             ScreenModePicker(screenMode, onScreenModeChange)
             Text(
-                "Versão pessoal de teste • emulação: melonDS (GPLv3)",
+                if (folder != null) "Versão de teste • não inclui jogos: use as suas próprias cópias • melonDS (GPLv3)"
+                else "Versão pessoal de teste • emulação: melonDS (GPLv3)",
+                textAlign = TextAlign.Center,
                 color = ComposeColor(0xFF5E6678),
                 fontSize = 11.sp,
                 modifier = Modifier.padding(vertical = 10.dp),
@@ -359,4 +494,54 @@ private fun ScreenModePicker(mode: SecondaryScreenMode, onChange: (SecondaryScre
             }
         }
     }
+}
+
+@Composable
+private fun FolderPanel(folder: FolderState, gamesFound: Int) {
+    val shape = RoundedCornerShape(12.dp)
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(ComposeColor(0xFF161B2B))
+            .border(1.dp, ComposeColor(0xFF2C3244), shape)
+            .padding(14.dp),
+    ) {
+        Text("Pasta dos jogos", color = ComposeColor(0xFF969EAF), fontSize = 12.sp)
+        Text(folder.path, color = ComposeColor(0xFFF0F2F8), fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+        Spacer(Modifier.height(6.dp))
+        val hint = when {
+            !folder.hasAccess -> "Copie seus arquivos .nds para essa pasta e toque em \"Permitir acesso\" (só na primeira vez)."
+            folder.scanning -> "Procurando jogos…"
+            gamesFound == 0 -> "Nenhum jogo encontrado. Copie seus arquivos .nds (ou .zip) para essa pasta e toque em \"Atualizar\"."
+            else -> "$gamesFound ${if (gamesFound == 1) "jogo encontrado" else "jogos encontrados"}. Para adicionar mais, copie para essa pasta."
+        }
+        Text(hint, color = ComposeColor(0xFFB4BBCB), fontSize = 13.sp)
+        Spacer(Modifier.height(10.dp))
+        androidx.compose.foundation.layout.Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            PanelButton("Abrir pasta", primary = folder.hasAccess, onClick = folder.onOpenFolder)
+            if (folder.hasAccess) {
+                PanelButton("Atualizar", primary = false, onClick = folder.onRefresh)
+            } else {
+                PanelButton("Permitir acesso", primary = true, onClick = folder.onGrantAccess)
+            }
+        }
+    }
+}
+
+@Composable
+private fun PanelButton(label: String, primary: Boolean, onClick: () -> Unit) {
+    val shape = RoundedCornerShape(50)
+    Text(
+        label,
+        color = if (primary) ComposeColor(0xFF0B1220) else ComposeColor(0xFFD0D5E0),
+        fontSize = 14.sp,
+        fontWeight = FontWeight.SemiBold,
+        modifier = Modifier
+            .clip(shape)
+            .background(if (primary) Accent else ComposeColor(0xFF232838))
+            .border(1.dp, if (primary) Accent else ComposeColor(0xFF343B50), shape)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 9.dp),
+    )
 }
