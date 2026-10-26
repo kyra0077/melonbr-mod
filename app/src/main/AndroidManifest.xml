@@ -43,15 +43,22 @@
             android:name="android.game_mode_config"
             android:resource="@xml/game_mode_config" />
 
+        <!-- Pokémon BR: opens on the game selection screen -->
+        <activity
+            android:name=".ui.gameselect.GameSelectActivity"
+            android:exported="true"
+            android:screenOrientation="fullUser"
+            android:theme="@style/AppTheme">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+        </activity>
         <activity
             android:name=".ui.romlist.RomListActivity"
             android:theme="@style/SplashTheme"
             android:launchMode="singleTop"
             android:exported="true">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN"/>
-                <category android:name="android.intent.category.LAUNCHER"/>
-            </intent-filter>
         </activity>
         <activity
             android:name=".ui.romdetails.RomDetailsActivity"
@@ -147,6 +154,15 @@
             android:label="@string/backgrounds">
         </activity>
 
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.games"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/game_files" />
+        </provider>
         <provider
             android:name="androidx.startup.InitializationProvider"
             android:authorities="${applicationId}.androidx-startup"

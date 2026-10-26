@@ -1,6 +1,11 @@
 import java.util.Properties
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
+// Pokémon BR: folder made by tools/pack_android_games.py with assets/games (ROMs, icons,
+// games.json) and res (launcher icon). Kept out of the repository; pass it with
+// -PembeddedGamesDir=<folder>.
+val embeddedGamesDir: String? = (project.findProperty("embeddedGamesDir") as String?)?.takeIf { it.isNotBlank() }
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.compose.compiler)
@@ -29,7 +34,7 @@ android {
     compileSdk = AppConfig.compileSdkVersion
     ndkVersion = AppConfig.ndkVersion
     defaultConfig {
-        applicationId = "me.magnum.melonds"
+        applicationId = "br.kyra.pokemonbr"
         minSdk = AppConfig.minSdkVersion
         targetSdk = AppConfig.targetSdkVersion
         versionCode = AppConfig.versionCode
@@ -53,7 +58,9 @@ android {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            signingConfig = signingConfigs.getByName("release")
+            // No release keystore in local.properties: sign with the debug key so the build installs.
+            signingConfig = if (signingConfigs.getByName("release").storeFile != null)
+                signingConfigs.getByName("release") else signingConfigs.getByName("debug")
         }
         getByName("debug") {
             applicationIdSuffix = ".dev"
@@ -95,6 +102,15 @@ android {
     sourceSets {
         // Adds exported schema location as test app assets.
         getByName("androidTest").assets.directories += "$projectDir/schemas"
+        embeddedGamesDir?.let { dir ->
+            getByName("main").assets.directories += "$dir/assets"
+            // Higher priority than main, so its launcher icon replaces melonDS's.
+            getByName("release").res.directories += "$dir/res"
+        }
+    }
+    androidResources {
+        // ROMs stay uncompressed: the APK barely shrinks and the first-run copy is much faster.
+        noCompress += listOf("nds")
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_21
