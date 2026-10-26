@@ -160,6 +160,43 @@ class EmulatorViewModel @Inject constructor(
     private val _uiEvent = EventSharedFlow<EmulatorUiEvent>()
     val uiEvent = _uiEvent.asSharedFlow()
 
+    // Pokémon BR: samples of the hidden bottom screen, to tell the player when it changes.
+    private var bottomScreenSamples: IntArray? = null
+    private var lastBottomScreenNotice = 0L
+
+    /**
+     * Grabs the current frame and compares the bottom screen with the previous call (like the PC
+     * build's minitela). Returns true when a big part of it changed, at most once every few seconds.
+     * Only call while the emulator is running: the capture waits for the next rendered frame.
+     */
+    suspend fun checkBottomScreenChanged(): Boolean {
+        if (_emulatorState.value !is EmulatorState.RunningRom) return false
+        if (!emulatorManager.takeScreenshot()) return false
+        val buffer = screenshotFrameBufferProvider.frameBuffer()
+        val step = 8
+        val samples = IntArray((256 / step) * (192 / step))
+        var i = 0
+        for (y in 192 until 384 step step) {
+            for (x in 0 until 256 step step) {
+                samples[i++] = buffer.getInt((y * 256 + x) * 4) and 0xFFFFFF
+            }
+        }
+        val previous = bottomScreenSamples
+        bottomScreenSamples = samples
+        if (previous == null || previous.size != samples.size) return false
+        val changed = samples.indices.count { samples[it] != previous[it] }
+        val now = System.currentTimeMillis()
+        if (changed * 100 > samples.size * 45 && now - lastBottomScreenNotice > 8000) {
+            lastBottomScreenNotice = now
+            return true
+        }
+        return false
+    }
+
+    fun resetBottomScreenWatch() {
+        bottomScreenSamples = null
+    }
+
     init {
         viewModelScope.launch {
             _layout.filterNotNull().collect {
@@ -453,6 +490,7 @@ class EmulatorViewModel @Inject constructor(
                         }
                     }
                     RomPauseMenuOption.VIEW_ACHIEVEMENTS -> _uiEvent.tryEmit(EmulatorUiEvent.ShowAchievementList)
+                    RomPauseMenuOption.SECONDARY_SCREEN -> _uiEvent.tryEmit(EmulatorUiEvent.ShowSecondaryScreenOptions)
                     RomPauseMenuOption.RESET -> resetEmulator()
                     RomPauseMenuOption.EXIT -> exitEmulator(force = false)
                 }

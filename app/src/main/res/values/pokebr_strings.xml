@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Pokémon BR (Portuguese only: the app is for Brazilian players) -->
+<resources>
+    <string name="pokebr_secondary_screen">Tela de toque (horizontal)</string>
+    <string name="pokebr_secondary_screen_title">Tela de toque com o celular na horizontal</string>
+    <string name="pokebr_secondary_side">Lado a lado</string>
+    <string name="pokebr_secondary_minimap">Minitela (pequena no canto)</string>
+    <string name="pokebr_secondary_hidden">Oculta (botão ⇄ para abrir)</string>
+    <string name="pokebr_bottom_screen_changed">A tela de toque mudou — toque em ⇄ para ver</string>
+</resources>

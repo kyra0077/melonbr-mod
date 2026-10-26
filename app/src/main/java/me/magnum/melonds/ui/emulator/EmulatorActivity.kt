@@ -464,6 +464,24 @@ class EmulatorActivity : AppCompatActivity() {
                 }
             }
         }
+        // Pokémon BR: with the bottom screen hidden, warn when it changes and pulse the swap button.
+        lifecycleScope.launch {
+            lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                while (true) {
+                    kotlinx.coroutines.delay(700)
+                    val hidden = me.magnum.melonds.domain.model.layout.SecondaryScreenMode.current.value ==
+                        me.magnum.melonds.domain.model.layout.SecondaryScreenMode.HIDDEN
+                    val landscape = resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+                    val swapButton = binding.viewLayoutControls.getLayoutComponentView(LayoutComponent.BUTTON_SWAP_SCREENS)?.view
+                    if (!hidden || !landscape || swapButton == null || binding.viewLayoutControls.areScreensSwapped() || activeOverlays.hasActiveOverlays()) {
+                        viewModel.resetBottomScreenWatch()
+                        continue
+                    }
+                    val changed = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { viewModel.checkBottomScreenChanged() }
+                    if (changed) showBottomScreenNotice(swapButton)
+                }
+            }
+        }
         lifecycleScope.launch {
             lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 viewModel.toastEvent.collectLatest {
@@ -507,6 +525,7 @@ class EmulatorActivity : AppCompatActivity() {
                             settingsLauncher.launch(settingsIntent)
                         }
                         is EmulatorUiEvent.ShowPauseMenu -> showPauseMenu(it.pauseMenu)
+                        EmulatorUiEvent.ShowSecondaryScreenOptions -> showSecondaryScreenOptions()
                         is EmulatorUiEvent.ShowRewindWindow -> showRewindWindow(it.rewindWindow, it.windowPosition)
                         is EmulatorUiEvent.ShowRomSaveStates -> {
                             showSaveStateSlotsDialog(it.saveStates) { slot ->
@@ -876,6 +895,51 @@ class EmulatorActivity : AppCompatActivity() {
                     viewModel.resumeEmulator()
                 }
                 .show()
+    }
+
+    private fun showBottomScreenNotice(swapButton: android.view.View) {
+        Toast.makeText(this, R.string.pokebr_bottom_screen_changed, Toast.LENGTH_SHORT).show()
+        // Three pulses on the swap button
+        val pulse = android.animation.ObjectAnimator.ofPropertyValuesHolder(
+            swapButton,
+            android.animation.PropertyValuesHolder.ofFloat(android.view.View.SCALE_X, 1f, 1.35f, 1f),
+            android.animation.PropertyValuesHolder.ofFloat(android.view.View.SCALE_Y, 1f, 1.35f, 1f),
+        ).apply {
+            duration = 450
+            repeatCount = 2
+        }
+        val originalAlpha = swapButton.alpha
+        swapButton.alpha = 1f
+        pulse.addListener(object : android.animation.AnimatorListenerAdapter() {
+            override fun onAnimationEnd(animation: android.animation.Animator) {
+                swapButton.alpha = originalAlpha
+            }
+        })
+        pulse.start()
+    }
+
+    /** Pokémon BR: side by side / minitela / hidden bottom screen in landscape. */
+    private fun showSecondaryScreenOptions() {
+        val modes = me.magnum.melonds.domain.model.layout.SecondaryScreenMode.entries
+        val labels = arrayOf(
+            getString(R.string.pokebr_secondary_side),
+            getString(R.string.pokebr_secondary_minimap),
+            getString(R.string.pokebr_secondary_hidden),
+        )
+        val current = me.magnum.melonds.domain.model.layout.SecondaryScreenMode.load(this)
+        activeOverlays.addActiveOverlay(EmulatorOverlay.PAUSE_MENU)
+        AlertDialog.Builder(this)
+            .setTitle(R.string.pokebr_secondary_screen_title)
+            .setSingleChoiceItems(labels, modes.indexOf(current)) { dialog, which ->
+                me.magnum.melonds.domain.model.layout.SecondaryScreenMode.set(this, modes[which])
+                if (binding.viewLayoutControls.areScreensSwapped()) swapScreen()
+                dialog.dismiss()
+            }
+            .setOnDismissListener {
+                activeOverlays.removeActiveOverlay(EmulatorOverlay.PAUSE_MENU)
+                viewModel.resumeEmulator()
+            }
+            .show()
     }
 
     private fun disableScreenTimeOut() {

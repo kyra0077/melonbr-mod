@@ -8,6 +8,7 @@ enum class RomPauseMenuOption(override val textResource: Int) : PauseMenuOption 
     SAVE_STATE(R.string.save_state),
     LOAD_STATE(R.string.load_state),
     REWIND(R.string.rewind),
+    SECONDARY_SCREEN(R.string.pokebr_secondary_screen),
     CHEATS(R.string.cheats),
     VIEW_ACHIEVEMENTS(R.string.achievements),
     RESET(R.string.reset),

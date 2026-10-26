@@ -12,6 +12,7 @@ import me.magnum.melonds.domain.model.layout.LayoutConfiguration
 import me.magnum.melonds.domain.model.layout.LayoutDisplayPair
 import me.magnum.melonds.domain.model.layout.ScreenFold
 import me.magnum.melonds.domain.model.layout.ScreenLayout
+import me.magnum.melonds.domain.model.layout.SecondaryScreenMode
 import me.magnum.melonds.domain.model.layout.UILayout
 import me.magnum.melonds.domain.model.layout.UILayoutVariant
 import me.magnum.melonds.domain.model.ui.Orientation
@@ -36,7 +37,8 @@ class UILayoutProvider(private val defaultLayoutProvider: DefaultLayoutProvider)
 
     private val _currentLayoutConfiguration = MutableStateFlow<LayoutConfiguration?>(null)
 
-    val currentLayout = combine(_currentLayoutConfiguration, currentLayoutVariant) { layoutConfiguration, variant ->
+    // SecondaryScreenMode only changes default layouts, but re-emitting is what makes them rebuild.
+    val currentLayout = combine(_currentLayoutConfiguration, currentLayoutVariant, SecondaryScreenMode.current) { layoutConfiguration, variant, _ ->
         if (layoutConfiguration == null || variant == null) {
             null
         } else {

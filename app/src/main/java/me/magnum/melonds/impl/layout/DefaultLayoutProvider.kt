@@ -15,6 +15,7 @@ import me.magnum.melonds.domain.model.layout.LayoutDisplay
 import me.magnum.melonds.domain.model.layout.PositionedLayoutComponent
 import me.magnum.melonds.domain.model.layout.ScreenFold
 import me.magnum.melonds.domain.model.layout.ScreenLayout
+import me.magnum.melonds.domain.model.layout.SecondaryScreenMode
 import me.magnum.melonds.domain.model.layout.UILayout
 import me.magnum.melonds.domain.model.layout.UILayoutVariant
 import me.magnum.melonds.domain.model.ui.Orientation
@@ -26,6 +27,10 @@ class DefaultLayoutProvider(
     private val context: Context,
     private val screenUnitsConverter: ScreenUnitsConverter,
 ) {
+
+    init {
+        SecondaryScreenMode.load(context)
+    }
 
     fun buildDefaultLayout(variant: UILayoutVariant): UILayout {
         val width = variant.uiSize.x
@@ -179,7 +184,34 @@ class DefaultLayoutProvider(
         val smallButtonsSize = screenUnitsConverter.dpToPixels(40f).toInt()
         val spacing4dp = screenUnitsConverter.dpToPixels(4f).toInt()
 
-        val screenComponents = if (singleScreenComponent == null) {
+        val secondaryMode = SecondaryScreenMode.current.value
+        // Minitela / hidden: the swap button brings the bottom (touch) screen up when needed.
+        var extraComponents = emptyArray<PositionedLayoutComponent>()
+        if (singleScreenComponent == null && secondaryMode != SecondaryScreenMode.SIDE_BY_SIDE) {
+            extraComponents = arrayOf(
+                PositionedLayoutComponent(
+                    Rect(safeLeft, safeTop + lrButtonsSize + spacing4dp * 2, smallButtonsSize, smallButtonsSize),
+                    LayoutComponent.BUTTON_SWAP_SCREENS,
+                ),
+            )
+        }
+
+        val screenComponents = if (singleScreenComponent == null && secondaryMode == SecondaryScreenMode.MINIMAP) {
+            val main = centerScreenIn(safeWidth, safeHeight)
+            val topScreenView = Rect(main.x + safeLeft, main.y + safeTop, main.width, main.height)
+            // Small live copy of the bottom screen in the top-right corner of the main screen
+            val miniWidth = (topScreenView.width * 0.3f).roundToInt()
+            val miniHeight = (miniWidth / consoleAspectRatio).toInt()
+            val margin = spacing4dp * 2
+            val miniView = Rect(topScreenView.x + topScreenView.width - miniWidth - margin, topScreenView.y + margin, miniWidth, miniHeight)
+            arrayOf(
+                PositionedLayoutComponent(topScreenView, LayoutComponent.TOP_SCREEN),
+                PositionedLayoutComponent(miniView, LayoutComponent.BOTTOM_SCREEN, alpha = 0.92f, onTop = true),
+            )
+        } else if (singleScreenComponent == null && secondaryMode == SecondaryScreenMode.HIDDEN) {
+            val main = centerScreenIn(safeWidth, safeHeight)
+            arrayOf(PositionedLayoutComponent(Rect(main.x + safeLeft, main.y + safeTop, main.width, main.height), LayoutComponent.TOP_SCREEN))
+        } else if (singleScreenComponent == null) {
             var topScreenWidth = (safeWidth * 0.66f).roundToInt()
             var topScreenHeight = (topScreenWidth / consoleAspectRatio).toInt()
             if (topScreenHeight > safeHeight) {
@@ -208,6 +240,7 @@ class DefaultLayoutProvider(
         return ScreenLayout(
             listOf(
                 *screenComponents,
+                *extraComponents,
                 PositionedLayoutComponent(dpadView, LayoutComponent.DPAD),
                 PositionedLayoutComponent(buttonsView, LayoutComponent.BUTTONS),
                 PositionedLayoutComponent(Rect(safeLeft, safeTop, lrButtonsSize, lrButtonsSize), LayoutComponent.BUTTON_L),

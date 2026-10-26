@@ -55,6 +55,7 @@ import androidx.core.content.FileProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import me.magnum.melonds.domain.model.layout.SecondaryScreenMode
 import me.magnum.melonds.domain.model.rom.Rom
 import me.magnum.melonds.domain.model.rom.config.RomConfig
 import me.magnum.melonds.ui.emulator.EmulatorActivity
@@ -86,6 +87,7 @@ class GameSelectActivity : AppCompatActivity() {
             var preparing by remember { mutableStateOf<Preparing?>(null) }
             var error by remember { mutableStateOf<String?>(null) }
             var lastPlayed by remember { mutableStateOf(prefs.getString(KEY_LAST, null)) }
+            var screenMode by remember { mutableStateOf(SecondaryScreenMode.load(this)) }
             val scope = rememberCoroutineScope()
 
             GameSelectScreen(
@@ -93,6 +95,11 @@ class GameSelectActivity : AppCompatActivity() {
                 lastPlayed = lastPlayed,
                 preparing = preparing,
                 error = error,
+                screenMode = screenMode,
+                onScreenModeChange = { mode ->
+                    SecondaryScreenMode.set(this, mode)
+                    screenMode = mode
+                },
                 onSelect = { game ->
                     if (preparing != null) return@GameSelectScreen
                     error = null
@@ -200,6 +207,8 @@ private fun GameSelectScreen(
     lastPlayed: String?,
     preparing: Preparing?,
     error: String?,
+    screenMode: SecondaryScreenMode,
+    onScreenModeChange: (SecondaryScreenMode) -> Unit,
     onSelect: (GameSelectActivity.EmbeddedGame) -> Unit,
 ) {
     val landscape = LocalConfiguration.current.screenWidthDp > LocalConfiguration.current.screenHeightDp
@@ -245,6 +254,7 @@ private fun GameSelectScreen(
                 Text(error, color = ComposeColor(0xFFFF9C8C), fontSize = 14.sp, textAlign = TextAlign.Center,
                     modifier = Modifier.padding(vertical = 8.dp))
             }
+            ScreenModePicker(screenMode, onScreenModeChange)
             Text(
                 "Versão pessoal de teste • emulação: melonDS (GPLv3)",
                 color = ComposeColor(0xFF5E6678),
@@ -319,4 +329,34 @@ private fun splitLabel(label: String): Pair<String, String> {
         if (first == "Pokémon" || first == "Pokemon") return first to label.substring(sp + 1)
     }
     return "" to label
+}
+
+@Composable
+private fun ScreenModePicker(mode: SecondaryScreenMode, onChange: (SecondaryScreenMode) -> Unit) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(top = 12.dp)) {
+        Text("Tela de toque com o celular na horizontal", color = ComposeColor(0xFF969EAF), fontSize = 12.sp)
+        Spacer(Modifier.height(6.dp))
+        androidx.compose.foundation.layout.Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf(
+                SecondaryScreenMode.SIDE_BY_SIDE to "Lado a lado",
+                SecondaryScreenMode.MINIMAP to "Minitela",
+                SecondaryScreenMode.HIDDEN to "Oculta",
+            ).forEach { (m, label) ->
+                val selected = m == mode
+                val shape = RoundedCornerShape(50)
+                Text(
+                    label,
+                    color = if (selected) ComposeColor(0xFF0B1220) else ComposeColor(0xFFD0D5E0),
+                    fontSize = 13.sp,
+                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                    modifier = Modifier
+                        .clip(shape)
+                        .background(if (selected) Accent else ComposeColor(0xFF232838))
+                        .border(1.dp, if (selected) Accent else ComposeColor(0xFF343B50), shape)
+                        .clickable { onChange(m) }
+                        .padding(horizontal = 14.dp, vertical = 7.dp),
+                )
+            }
+        }
+    }
 }
