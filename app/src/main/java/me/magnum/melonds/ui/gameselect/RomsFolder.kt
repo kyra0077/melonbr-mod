@@ -9,13 +9,13 @@ import android.provider.DocumentsContract
 import java.io.File
 
 /**
- * Pokémon BR (shareable build, no ROMs inside): the folder where players put their own
+ * MelonBR Mod: the folder where players put their own
  * games. It lives in shared storage so any file manager can reach it:
- * Documents/Pokemon BR/ROMs (shown in Portuguese file managers as "Documentos").
+ * Documents/MelonBR Mod/ROMs (shown in Portuguese file managers as "Documentos").
  */
 object RomsFolder {
-    const val RELATIVE_PATH = "Pokemon BR/ROMs"
-    const val DISPLAY_PATH = "Documentos/Pokemon BR/ROMs"
+    const val RELATIVE_PATH = "MelonBR Mod/ROMs"
+    const val DISPLAY_PATH = "Documentos/MelonBR Mod/ROMs"
     private const val EXTERNAL_STORAGE_AUTHORITY = "com.android.externalstorage.documents"
     private const val DOCUMENT_ID = "primary:Documents/$RELATIVE_PATH"
 

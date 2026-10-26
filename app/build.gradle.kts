@@ -1,8 +1,8 @@
 import java.util.Properties
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
-// Pokémon BR: folder made by tools/pack_android_games.py with assets/games (ROMs, icons,
-// games.json) and res (launcher icon). Kept out of the repository; pass it with
+// MelonBR Mod, optional personal build: folder made by tools/pack_android_games.py with
+// assets/games (ROMs, icons, games.json) and res (launcher icon, app name). Kept out of the repository; pass it with
 // -PembeddedGamesDir=<folder>.
 val embeddedGamesDir: String? = (project.findProperty("embeddedGamesDir") as String?)?.takeIf { it.isNotBlank() }
 
@@ -35,7 +35,7 @@ android {
     ndkVersion = AppConfig.ndkVersion
     defaultConfig {
         // Personal build (ROMs inside) and shareable build (reads the ROMs folder) install side by side.
-        applicationId = if (embeddedGamesDir != null) "br.kyra.pokemonbr" else "br.kyra.pokemonbr.roms"
+        applicationId = if (embeddedGamesDir != null) "br.kyra.pokemonbr" else "br.kyra.melonbrmod"
         minSdk = AppConfig.minSdkVersion
         targetSdk = AppConfig.targetSdkVersion
         versionCode = AppConfig.versionCode

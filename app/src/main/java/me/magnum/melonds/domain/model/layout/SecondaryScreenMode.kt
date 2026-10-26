@@ -6,7 +6,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 /**
- * Pokémon BR: where the DS bottom (touch) screen goes in the default landscape layout.
+ * MelonBR Mod: where the DS bottom (touch) screen goes in the default landscape layout.
  * Custom layouts made in the layout editor are not affected.
  */
 enum class SecondaryScreenMode {

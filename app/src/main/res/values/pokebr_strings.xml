@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Pokémon BR (Portuguese only: the app is for Brazilian players) -->
+<!-- MelonBR Mod (Portuguese only: the app is for Brazilian players) -->
 <resources>
     <string name="pokebr_secondary_screen">Tela de toque (horizontal)</string>
     <string name="pokebr_secondary_screen_title">Tela de toque com o celular na horizontal</string>

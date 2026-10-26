@@ -160,7 +160,7 @@ class EmulatorViewModel @Inject constructor(
     private val _uiEvent = EventSharedFlow<EmulatorUiEvent>()
     val uiEvent = _uiEvent.asSharedFlow()
 
-    // Pokémon BR: samples of the hidden bottom screen, to tell the player when it changes.
+    // MelonBR Mod: samples of the hidden bottom screen, to tell the player when it changes.
     private var bottomScreenSamples: IntArray? = null
     private var lastBottomScreenNotice = 0L
 

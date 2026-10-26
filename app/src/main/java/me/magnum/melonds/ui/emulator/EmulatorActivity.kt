@@ -464,7 +464,7 @@ class EmulatorActivity : AppCompatActivity() {
                 }
             }
         }
-        // Pokémon BR: with the bottom screen hidden, warn when it changes and pulse the swap button.
+        // MelonBR Mod: with the bottom screen hidden, warn when it changes and pulse the swap button.
         lifecycleScope.launch {
             lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 while (true) {
@@ -918,7 +918,7 @@ class EmulatorActivity : AppCompatActivity() {
         pulse.start()
     }
 
-    /** Pokémon BR: side by side / minitela / hidden bottom screen in landscape. */
+    /** MelonBR Mod: side by side / minitela / hidden bottom screen in landscape. */
     private fun showSecondaryScreenOptions() {
         val modes = me.magnum.melonds.domain.model.layout.SecondaryScreenMode.entries
         val labels = arrayOf(

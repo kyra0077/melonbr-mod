@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prepares the embedded games for the "Pokémon BR" APK.
+"""Prepares the embedded games for a personal MelonBR Mod APK (games inside the APK).
 
     python tools/pack_android_games.py --list jogos.txt --out <folder>
     gradlew assembleGitHubProdRelease -PembeddedGamesDir=<folder>
@@ -125,6 +125,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--list", required=True)
     ap.add_argument("--out", required=True)
+    ap.add_argument("--app-name", default="Pokémon BR", help="launcher name of the personal build")
     args = ap.parse_args()
 
     base = os.path.dirname(os.path.abspath(args.list))
@@ -182,6 +183,12 @@ def main():
     with open(os.path.join(res, "values", "pokebr_colors.xml"), "w", encoding="utf-8") as f:
         f.write('<?xml version="1.0" encoding="utf-8"?>\n<resources>\n'
                 '    <color name="pokebr_launcher_bg">#FF141A2C</color>\n</resources>\n')
+    # Launcher name, in every locale folder the app has (they would win over a plain values/ override).
+    name_xml = args.app_name.replace("&", "&amp;").replace("<", "&lt;")
+    for folder in ["values", "values-b+pt+BR", "values-b+es", "values-b+fr", "values-b+id", "values-b+it", "values-b+ru", "values-b+zh+Hans"]:
+        os.makedirs(os.path.join(res, folder), exist_ok=True)
+        with open(os.path.join(res, folder, "pokebr_app_name.xml"), "w", encoding="utf-8") as f:
+            f.write(f'<?xml version="1.0" encoding="utf-8"?>\n<resources>\n    <string name="app_name">{name_xml}</string>\n</resources>\n')
     print(f"[android] {len(meta)} games -> {args.out}")
 
 

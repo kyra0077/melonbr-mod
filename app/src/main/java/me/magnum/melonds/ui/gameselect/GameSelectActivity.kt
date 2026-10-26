@@ -79,13 +79,13 @@ import javax.inject.Inject
 import androidx.compose.ui.graphics.Color as ComposeColor
 
 /**
- * Launcher screen of the "Pokémon BR" build.
+ * Launcher screen of MelonBR Mod.
  *
- * Personal build (ROMs embedded): one card per game in assets/games/games.json. Picking a
+ * Personal build (ROMs embedded, -PembeddedGamesDir): one card per game in assets/games/games.json. Picking a
  * card copies that ROM out of the APK the first time (the emulator needs a real file).
  *
- * Shareable build (no ROMs inside): the player's own games from the ROMs folder
- * (Documents/Pokemon BR/ROMs), which the app creates and can open in the file manager.
+ * Regular build (no ROMs inside): the player's own games from the ROMs folder
+ * (Documents/MelonBR Mod/ROMs), which the app creates and can open in the file manager.
  */
 @AndroidEntryPoint
 class GameSelectActivity : AppCompatActivity() {
@@ -223,7 +223,7 @@ class GameSelectActivity : AppCompatActivity() {
         return dirs.any { it in granted }
     }
 
-    /** "Documentos/Pokemon BR/ROMs", or the folder the player picked instead. */
+    /** "Documentos/MelonBR Mod/ROMs", or the folder the player picked instead. */
     private fun currentFolderLabel(): String {
         val dir = settingsRepository.getRomSearchDirectories().firstOrNull() ?: return RomsFolder.DISPLAY_PATH
         if (RomsFolder.isExpectedTree(dir)) return RomsFolder.DISPLAY_PATH
